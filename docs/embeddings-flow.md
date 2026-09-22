@@ -8,17 +8,27 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-`.env` must contain `OPENAI_API_KEY=...`.
+`.env` must contain:
+
+```
+OPENAI_API_KEY=...
+HOST=127.0.0.1
+PORT=8000
+```
 
 ## Run the server
+
+Host/port are read from `.env` (`app/main.py` has a `if __name__ == "__main__"` block using `uvicorn.run(...)`), so run it as a module:
 
 ```
 cd D:\Projects\AI_Engineer
 venv\Scripts\activate
-uvicorn app.main:app --reload
+python -m app.main
 ```
 
-Server runs at `http://127.0.0.1:8000`.
+(`uvicorn app.main:app --reload` still works too, but then it uses uvicorn's own default host/port — `PORT` in `.env` only takes effect when run via `python -m app.main`.)
+
+Server runs at `http://<HOST>:<PORT>` from `.env` (default `http://127.0.0.1:8000`).
 
 ---
 
