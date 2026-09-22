@@ -56,6 +56,16 @@ client.embeddings.create(model="text-embedding-3-small", input=text)
 
 **Test**
 
+Payload (paste directly into the web UI textarea, or into `/docs` → `Try it out` → Request body):
+
+```json
+{
+  "text": "Chicken biryani costs 250 rupees"
+}
+```
+
+curl equivalent:
+
 ```
 curl -X POST http://127.0.0.1:8000/api/embeddings ^
   -H "Content-Type: application/json" ^
@@ -113,6 +123,35 @@ sorted results, highest similarity first
 
 **Test**
 
+Payload for `/docs` → `Try it out`:
+
+```json
+{
+  "query": "How much does chicken biryani cost?",
+  "sentences": [
+    "Chicken biryani costs 250 rupees.",
+    "The delivery partner is 10 minutes away.",
+    "Veg meals are available for 180 rupees."
+  ]
+}
+```
+
+For the web UI form (separate fields, not raw JSON) — paste this into the **query** box:
+
+```
+How much does chicken biryani cost?
+```
+
+...and this into the **sentences** textarea (one sentence per line):
+
+```
+Chicken biryani costs 250 rupees.
+The delivery partner is 10 minutes away.
+Veg meals are available for 180 rupees.
+```
+
+curl equivalent:
+
 ```
 curl -X POST http://127.0.0.1:8000/api/embeddings/similarity ^
   -H "Content-Type: application/json" ^
@@ -142,15 +181,69 @@ Note: this and the `/api/embeddings` endpoint are `POST`-only — pasting the UR
 
 ---
 
-## Step 3 — Chunking ⬜
+## Step 3 — Chunking ✅
 
-Split a long document into overlapping chunks, embed each one.
+Split a long document into overlapping word-based chunks, embed each one.
 
-**Plan**
+**Files**
 
-- `app/schemas/embedding.py` → add `ChunkRequest` (`text`, `chunk_size`, `overlap`)
-- `app/services/chunking_service.py` → `chunk_text(text, chunk_size, overlap)`
-- `app/main.py` → `POST /api/embeddings/chunk` (reuses batch embedding from Step 2)
+- `app/schemas/embedding.py` → `ChunkRequest` (`text`, `chunk_size=500`, `overlap=50`)
+- `app/services/chunking_service.py` → `chunk_text(text, chunk_size, overlap)` — pure word-splitting, no OpenAI call
+- `app/main.py` → `POST /api/embeddings/chunk` (reuses `create_embeddings` from `similarity_service.py` — one batched OpenAI call for all chunks)
+
+**Flow**
+
+```
+text
+  |
+  v
+chunk_text(...)              (word-based split, overlap between consecutive chunks)
+  |
+  v
+[chunk_1, chunk_2, ...]
+  |
+  v
+create_embeddings(chunks)    (1 batched OpenAI call)
+  |
+  v
+[{chunk_id, text, dimensions, embedding}, ...]
+```
+
+**Guard added:** if `overlap >= chunk_size`, the loop's `start = end - overlap` never advances and the request would hang forever. The endpoint now returns `400 overlap must be smaller than chunk_size` instead of hanging — verified this returns immediately rather than blocking.
+
+**Test**
+
+Payload for `/docs` → `Try it out`:
+
+```json
+{
+  "text": "Customers can cancel an order before the restaurant accepts it. Once the restaurant accepts the order, cancellation may not be possible. If the restaurant has started preparing the food, cancellation is normally not allowed. Refund eligibility depends on the cancellation stage and payment method.",
+  "chunk_size": 20,
+  "overlap": 5
+}
+```
+
+For the web UI form — paste this into the **document** textarea:
+
+```
+Customers can cancel an order before the restaurant accepts it. Once the restaurant accepts the order, cancellation may not be possible. If the restaurant has started preparing the food, cancellation is normally not allowed. Refund eligibility depends on the cancellation stage and payment method.
+```
+
+...and set **Chunk size** = `20`, **Overlap** = `5`.
+
+curl equivalent:
+
+```
+curl -X POST http://127.0.0.1:8000/api/embeddings/chunk ^
+  -H "Content-Type: application/json" ^
+  -d "{\"text\": \"Customers can cancel an order before the restaurant accepts it. Once the restaurant accepts the order, cancellation may not be possible. If the restaurant has started preparing the food, cancellation is normally not allowed. Refund eligibility depends on the cancellation stage and payment method.\", \"chunk_size\": 20, \"overlap\": 5}"
+```
+
+Verified live — 3 chunks, each one overlapping the last by 5 words (e.g. "order, cancellation may not be" appears at the end of chunk 0 and the start of chunk 1).
+
+**Web UI**
+
+`app/static/index.html` has a third section: a textarea for the document + number inputs for chunk size / overlap, calling `POST /api/embeddings/chunk` and listing each chunk with its dimension count. All three tools (embed, similarity, chunk) now live on one page at `http://127.0.0.1:8000/`.
 
 ---
 
@@ -158,7 +251,7 @@ Split a long document into overlapping chunks, embed each one.
 
 - [x] Step 1 — text → embedding endpoint
 - [x] Step 2 — cosine similarity ranking
-- [ ] Step 3 — document chunking
+- [x] Step 3 — document chunking
 - [ ] Step 4 — store vectors (pgvector)
 - [ ] Step 5 — vector similarity search in Postgres
 - [ ] Step 6 — full RAG (retrieval + LLM answer)

@@ -1,12 +1,13 @@
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from app.schemas.embedding import EmbeddingRequest, SimilarityRequest
+from app.schemas.embedding import ChunkRequest, EmbeddingRequest, SimilarityRequest
+from app.services.chunking_service import chunk_text
 from app.services.embedding_service import create_embedding
-from app.services.similarity_service import find_similar_sentences
+from app.services.similarity_service import create_embeddings, find_similar_sentences
 
 
 load_dotenv()
@@ -41,6 +42,42 @@ def embedding_similarity(
     return {
         "query": request.query,
         "results": results,
+    }
+
+
+@app.post("/api/embeddings/chunk")
+def chunk_and_embed(request: ChunkRequest):
+
+    if request.overlap >= request.chunk_size:
+        raise HTTPException(
+            status_code=400,
+            detail="overlap must be smaller than chunk_size",
+        )
+
+    chunks = chunk_text(
+        text=request.text,
+        chunk_size=request.chunk_size,
+        overlap=request.overlap,
+    )
+
+    embeddings = create_embeddings(chunks)
+
+    results = []
+
+    for index, (chunk, embedding) in enumerate(
+        zip(chunks, embeddings)
+    ):
+
+        results.append({
+            "chunk_id": index,
+            "text": chunk,
+            "dimensions": len(embedding),
+            "embedding": embedding,
+        })
+
+    return {
+        "total_chunks": len(results),
+        "chunks": results,
     }
 
 

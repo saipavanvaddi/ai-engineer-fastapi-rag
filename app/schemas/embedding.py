@@ -8,3 +8,9 @@ class EmbeddingRequest(BaseModel):
 class SimilarityRequest(BaseModel):
     query: str
     sentences: list[str]
+
+
+class ChunkRequest(BaseModel):
+    text: str
+    chunk_size: int = 500
+    overlap: int = 50

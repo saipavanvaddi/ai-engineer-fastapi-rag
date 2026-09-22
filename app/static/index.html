@@ -110,7 +110,7 @@
   section h1 {
     margin-bottom: 4px;
   }
-  input[type="text"] {
+  input[type="text"], input[type="number"] {
     background: var(--bg);
     color: var(--text);
     border: 1px solid var(--border);
@@ -118,6 +118,25 @@
     padding: 10px 12px;
     font-size: 14px;
   }
+  .number-row {
+    display: flex;
+    gap: 12px;
+  }
+  .number-row label {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .chunk-item {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .chunk-item:last-child { border-bottom: none; }
+  .chunk-item .chunk-id { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
   .bar-track {
     background: var(--bg);
     border-radius: 6px;
@@ -162,6 +181,26 @@
     </form>
 
     <div id="sim-result"></div>
+  </section>
+
+  <section>
+    <h1>Chunk + Embed</h1>
+    <p class="sub">POST /api/embeddings/chunk — splits text into overlapping chunks and embeds each one</p>
+
+    <form id="chunk-form">
+      <textarea id="chunk-text" placeholder="Paste a longer document here..." required></textarea>
+      <div class="number-row">
+        <label>Chunk size (words)
+          <input type="number" id="chunk-size" value="20" min="1" required>
+        </label>
+        <label>Overlap (words)
+          <input type="number" id="chunk-overlap" value="5" min="0" required>
+        </label>
+      </div>
+      <button type="submit" id="chunk-submit-btn">Chunk &amp; embed</button>
+    </form>
+
+    <div id="chunk-result"></div>
   </section>
 </main>
 
@@ -259,6 +298,58 @@
     } finally {
       simSubmitBtn.disabled = false;
       simSubmitBtn.textContent = "Rank by similarity";
+    }
+  });
+
+  const chunkForm = document.getElementById("chunk-form");
+  const chunkResultEl = document.getElementById("chunk-result");
+  const chunkSubmitBtn = document.getElementById("chunk-submit-btn");
+
+  chunkForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const text = document.getElementById("chunk-text").value.trim();
+    const chunk_size = parseInt(document.getElementById("chunk-size").value, 10);
+    const overlap = parseInt(document.getElementById("chunk-overlap").value, 10);
+
+    if (!text) return;
+
+    chunkSubmitBtn.disabled = true;
+    chunkSubmitBtn.textContent = "Loading...";
+    chunkResultEl.innerHTML = "";
+
+    try {
+      const response = await fetch("/api/embeddings/chunk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, chunk_size, overlap }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`${response.status}: ${detail}`);
+      }
+
+      const data = await response.json();
+
+      const items = data.chunks.map(c => `
+        <div class="chunk-item">
+          <div class="chunk-id">Chunk ${c.chunk_id} · ${c.dimensions} dims</div>
+          <div>${c.text}</div>
+        </div>
+      `).join("");
+
+      chunkResultEl.innerHTML = `
+        <div class="card">
+          <div class="row"><span>Total chunks</span><span>${data.total_chunks}</span></div>
+        </div>
+        <div class="card" style="margin-top:12px">${items}</div>
+      `;
+    } catch (err) {
+      chunkResultEl.innerHTML = `<p class="error">${err.message}</p>`;
+    } finally {
+      chunkSubmitBtn.disabled = false;
+      chunkSubmitBtn.textContent = "Chunk & embed";
     }
   });
 </script>
