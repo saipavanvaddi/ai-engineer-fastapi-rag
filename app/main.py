@@ -4,8 +4,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.schemas.embedding import EmbeddingRequest
+from app.schemas.embedding import EmbeddingRequest, SimilarityRequest
 from app.services.embedding_service import create_embedding
+from app.services.similarity_service import find_similar_sentences
 
 
 load_dotenv()
@@ -24,6 +25,22 @@ def create_text_embedding(
         "text": request.text,
         "dimensions": len(embedding),
         "embedding": embedding,
+    }
+
+
+@app.post("/api/embeddings/similarity")
+def embedding_similarity(
+    request: SimilarityRequest,
+):
+
+    results = find_similar_sentences(
+        request.query,
+        request.sentences,
+    )
+
+    return {
+        "query": request.query,
+        "results": results,
     }
 
 

@@ -83,24 +83,62 @@ A simple test page is served at `http://127.0.0.1:8000/` (no Postman/curl needed
 
 ---
 
-## Step 2 — Similarity search ⬜
+## Step 2 — Similarity search ✅
 
 Compare a query against several candidate sentences, rank by cosine similarity.
 
-**Plan**
+**Files**
 
-- `app/schemas/embedding.py` → add `SimilarityRequest` (`query`, `sentences`)
-- `app/services/similarity_service.py` → `create_embeddings(texts)` (batched), `cosine_similarity(a, b)`, `find_similar_sentences(query, sentences)`
+- `app/schemas/embedding.py` → `SimilarityRequest` (`query`, `sentences`)
+- `app/services/similarity_service.py` → `create_embeddings(texts)` (batched, one API call for query + all sentences), `cosine_similarity(a, b)` (numpy dot / norms), `find_similar_sentences(query, sentences)` (embeds all, scores each sentence against the query, sorts descending)
 - `app/main.py` → `POST /api/embeddings/similarity`
-- Needs `numpy` (already installed)
 
-**Test (once built)**
+**Flow**
+
+```
+[query] + sentences
+        |
+        v
+create_embeddings(...)   (1 batched OpenAI call)
+        |
+        v
+query_embedding, [sentence_embeddings]
+        |
+        v
+cosine_similarity(query_embedding, each sentence_embedding)
+        |
+        v
+sorted results, highest similarity first
+```
+
+**Test**
 
 ```
 curl -X POST http://127.0.0.1:8000/api/embeddings/similarity ^
   -H "Content-Type: application/json" ^
   -d "{\"query\": \"How much does chicken biryani cost?\", \"sentences\": [\"Chicken biryani costs 250 rupees.\", \"The delivery partner is 10 minutes away.\", \"Veg meals are available for 180 rupees.\"]}"
 ```
+
+Verified live:
+
+```json
+{
+  "query": "How much does chicken biryani cost?",
+  "results": [
+    {"sentence": "Chicken biryani costs 250 rupees.", "similarity": 0.7856},
+    {"sentence": "Veg meals are available for 180 rupees.", "similarity": 0.4388},
+    {"sentence": "The delivery partner is 10 minutes away.", "similarity": 0.1088}
+  ]
+}
+```
+
+Ranking matches expectations — the biryani-price sentence wins, the unrelated delivery sentence loses.
+
+**Web UI**
+
+`app/static/index.html` now has a second section: a query field + a "one sentence per line" textarea, calling `POST /api/embeddings/similarity` and rendering results as ranked bars (similarity score as bar width). Same page as Step 1's form, both sections live at `http://127.0.0.1:8000/`.
+
+Note: this and the `/api/embeddings` endpoint are `POST`-only — pasting the URL into the browser address bar sends a `GET` and returns `404`/`405`. Use the web UI, `curl`, Postman, or the auto-generated Swagger docs at `http://127.0.0.1:8000/docs` to actually call them.
 
 ---
 
@@ -119,7 +157,7 @@ Split a long document into overlapping chunks, embed each one.
 ## Progress
 
 - [x] Step 1 — text → embedding endpoint
-- [ ] Step 2 — cosine similarity ranking
+- [x] Step 2 — cosine similarity ranking
 - [ ] Step 3 — document chunking
 - [ ] Step 4 — store vectors (pgvector)
 - [ ] Step 5 — vector similarity search in Postgres

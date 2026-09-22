@@ -104,19 +104,65 @@
     color: #f28b82;
     font-size: 14px;
   }
+  section {
+    margin-top: 40px;
+  }
+  section h1 {
+    margin-bottom: 4px;
+  }
+  input[type="text"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  .bar-track {
+    background: var(--bg);
+    border-radius: 6px;
+    height: 8px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    background: var(--accent);
+    height: 100%;
+  }
+  .result-item {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .result-item:last-child { border-bottom: none; }
+  .result-item .row span:last-child { color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Embeddings Tester</h1>
-  <p class="sub">POST /api/embeddings — converts text into a vector</p>
+  <section>
+    <h1>Embeddings Tester</h1>
+    <p class="sub">POST /api/embeddings — converts text into a vector</p>
 
-  <form id="embed-form">
-    <textarea id="text" placeholder="Chicken biryani costs 250 rupees" required></textarea>
-    <button type="submit" id="submit-btn">Get embedding</button>
-  </form>
+    <form id="embed-form">
+      <textarea id="text" placeholder="Chicken biryani costs 250 rupees" required></textarea>
+      <button type="submit" id="submit-btn">Get embedding</button>
+    </form>
 
-  <div id="result"></div>
+    <div id="result"></div>
+  </section>
+
+  <section>
+    <h1>Similarity Search</h1>
+    <p class="sub">POST /api/embeddings/similarity — ranks sentences by relevance to a query</p>
+
+    <form id="similarity-form">
+      <input type="text" id="sim-query" placeholder="How much does chicken biryani cost?" required>
+      <textarea id="sim-sentences" placeholder="One sentence per line&#10;Chicken biryani costs 250 rupees.&#10;The delivery partner is 10 minutes away.&#10;Veg meals are available for 180 rupees." required></textarea>
+      <button type="submit" id="sim-submit-btn">Rank by similarity</button>
+    </form>
+
+    <div id="sim-result"></div>
+  </section>
 </main>
 
 <script>
@@ -161,6 +207,58 @@
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = "Get embedding";
+    }
+  });
+
+  const simForm = document.getElementById("similarity-form");
+  const simResultEl = document.getElementById("sim-result");
+  const simSubmitBtn = document.getElementById("sim-submit-btn");
+
+  simForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const query = document.getElementById("sim-query").value.trim();
+    const sentences = document.getElementById("sim-sentences").value
+      .split("\n")
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+
+    if (!query || sentences.length === 0) return;
+
+    simSubmitBtn.disabled = true;
+    simSubmitBtn.textContent = "Loading...";
+    simResultEl.innerHTML = "";
+
+    try {
+      const response = await fetch("/api/embeddings/similarity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, sentences }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`${response.status}: ${detail}`);
+      }
+
+      const data = await response.json();
+
+      const items = data.results.map(r => {
+        const pct = Math.max(0, r.similarity) * 100;
+        return `
+          <div class="result-item">
+            <div class="row"><span>${r.sentence}</span><span>${r.similarity.toFixed(4)}</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          </div>
+        `;
+      }).join("");
+
+      simResultEl.innerHTML = `<div class="card">${items}</div>`;
+    } catch (err) {
+      simResultEl.innerHTML = `<p class="error">${err.message}</p>`;
+    } finally {
+      simSubmitBtn.disabled = false;
+      simSubmitBtn.textContent = "Rank by similarity";
     }
   });
 </script>
