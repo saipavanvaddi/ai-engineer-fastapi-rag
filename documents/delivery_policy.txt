@@ -1,0 +1,8 @@
+Delivery usually takes 30 to 45 minutes depending on distance and traffic.
+Delivery partners are assigned once the restaurant confirms the order.
+Live tracking is available in the app once a delivery partner is assigned.
+Delivery charges are 20 rupees for orders under 300 rupees and free above that.
+Deliveries beyond 8 kilometers from the restaurant are not currently supported.
+During heavy rain or festival days, delivery times may extend by 15 to 20 minutes.
+Customers can leave delivery instructions such as gate codes or landmark notes at checkout.
+Contactless delivery can be selected, in which case the order is left at the door.

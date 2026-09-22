@@ -3,3 +3,5 @@ uvicorn==0.53.0
 openai==3.17.0
 python-dotenv==1.2.3
 numpy==2.4.6
+psycopg[binary]==3.3.6
+python-multipart==0.0.32

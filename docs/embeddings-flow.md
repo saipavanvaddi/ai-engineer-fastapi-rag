@@ -247,11 +247,145 @@ Verified live — 3 chunks, each one overlapping the last by 5 words (e.g. "orde
 
 ---
 
+## Step 4 — Store vectors (pgvector) ✅
+
+Persist chunk embeddings in Postgres instead of only returning them in the response.
+
+Full infra details: [docs/vector-storage.md](vector-storage.md).
+
+**Infra**
+
+- Native local Postgres 18 has no `pgvector` (would need MSVC build tools to compile) — switched to the official `pgvector/pgvector` Docker image instead (`docker compose up -d`)
+- `docker-compose.yml` — pgvector Postgres container on port `5433` (not 5432, avoids clashing with native Postgres), database `ai_engineer_embeddings`, data in named volume `ai_engineer_pgvector_data`
+- `app/db/database.py` → `get_connection()` (psycopg, reads `DATABASE_URL`)
+- `sql/02_schema.sql` + `scripts/init_db.py` — applies `CREATE EXTENSION vector` + `document_chunks` table automatically
+
+**Endpoint**
+
+- `app/schemas/embedding.py` → `StoreChunksRequest` (`text`, `chunk_size`, `overlap`, `document_id`, `source`)
+- `app/services/vector_store_service.py` → `store_chunks(chunks, embeddings, document_id, source)` — inserts each chunk as a row, embedding passed as a `[v1,v2,...]` string cast to `::vector`, metadata via psycopg's `Jsonb`
+- `app/main.py` → `POST /api/embeddings/store` — chunks text, embeds (batched), stores in `document_chunks`, returns the inserted row IDs
+- Kept separate from `POST /api/embeddings/chunk` (which stays a pure preview with no side effects) — same overlap guard applied
+
+**Flow**
+
+```
+text
+  |
+  v
+chunk_text(...)
+  |
+  v
+create_embeddings(chunks)     (1 batched OpenAI call)
+  |
+  v
+store_chunks(...)             (INSERT ... VALUES (%s, %s, %s::vector, %s) per chunk)
+  |
+  v
+document_chunks table (Postgres + pgvector)
+```
+
+**Test**
+
+Payload for `/docs` → `Try it out`:
+
+```json
+{
+  "text": "Customers can cancel an order before the restaurant accepts it. Once the restaurant accepts the order, cancellation may not be possible.",
+  "chunk_size": 15,
+  "overlap": 3,
+  "document_id": 1,
+  "source": "cancellation_policy.txt"
+}
+```
+
+For the web UI form — paste this into the **document** textarea:
+
+```
+Customers can cancel an order before the restaurant accepts it. Once the restaurant accepts the order, cancellation may not be possible.
+```
+
+...set **Chunk size** = `15`, **Overlap** = `3`, and paste this into the **source label** field:
+
+```
+cancellation_policy.txt
+```
+
+Verified live — stored 3 rows, confirmed via `docker exec ai_engineer_pgvector psql ... SELECT id, document_id, vector_dims(embedding), metadata FROM document_chunks`: correct `document_id`, `1536`-dim vectors, `{"source": "cancellation_policy.txt"}` metadata.
+
+**Web UI**
+
+`app/static/index.html` has a fourth section — "Store in Postgres" — same chunk-size/overlap controls as the chunk preview, plus an optional source label, calling `POST /api/embeddings/store` and showing the stored row count + IDs.
+
+---
+
+## Sample data — 5 seeded documents
+
+Real files, not inline strings — visible in the project at [`documents/`](../documents):
+
+| file                                                 | document_id | covers                                                                 |
+|-------------------------------------------------------|-------------|-------------------------------------------------------------------------|
+| [`documents/menu.txt`](../documents/menu.txt)                             | 1–5 (alphabetical — see below) | Prices (biryani, mutton, naan, drinks), combos, spice levels, vegan options |
+| [`documents/delivery_policy.txt`](../documents/delivery_policy.txt)       | ″ | Delivery time, charges, range limit, rain delays, delivery instructions, contactless |
+| [`documents/cancellation_policy.txt`](../documents/cancellation_policy.txt) | ″ | Cancel-before-acceptance rule, auto-cancel + refund if restaurant can't fulfil, repeated-cancellation restriction, post-acceptance support escalation |
+| [`documents/refund_policy.txt`](../documents/refund_policy.txt)           | ″ | Refund timing by payment method, wallet vs. bank refund, damaged/missing/incorrect order refunds, refund status tracking |
+| [`documents/support_hours.txt`](../documents/support_hours.txt)           | ″ | Restaurant hours, chat/phone/email support hours, holiday hours, supervisor escalation |
+
+[`scripts/seed_documents.py`](../scripts/seed_documents.py) globs `documents/*.txt`,
+assigns `document_id` in alphabetical filename order (so `cancellation_policy.txt` is
+`1`, not `menu.txt`), and stores each file as one row (no chunking) with
+`source = filename`.
+
+Run:
+
+```
+cd D:\Projects\AI_Engineer
+venv\Scripts\activate
+python scripts/seed_documents.py
+```
+
+Re-running it inserts new rows each time (it doesn't delete old ones first) — clear the
+table first if you want a fresh set: `docker exec ai_engineer_pgvector psql -U postgres -d ai_engineer_embeddings -c "DELETE FROM document_chunks;"`
+
+---
+
+## Uploading your own files ✅
+
+`POST /api/embeddings/upload` — a real ingestion endpoint: upload a `.txt` file, it gets
+chunked, embedded, and stored, with `source` set to the uploaded filename.
+
+**Files**
+
+- `app/main.py` → `POST /api/embeddings/upload` (multipart form: `file`, `chunk_size`, `overlap`, `document_id`) — needs `python-multipart` (added to `requirements.txt`)
+- Reuses `chunk_text`, `create_embeddings`, `store_chunks` — no new service needed
+- Rejects non-UTF-8 files (`400`, e.g. PDFs/images) and empty files, same `overlap >= chunk_size` guard as the other endpoints
+
+**Test**
+
+```
+curl -X POST http://127.0.0.1:8000/api/embeddings/upload ^
+  -F "file=@documents/menu.txt" ^
+  -F "chunk_size=30" ^
+  -F "overlap=5"
+```
+
+Verified live — uploading `documents/menu.txt` produced 4 chunks (ids 27–30), each with
+`metadata: {"source": "menu.txt"}` confirmed via `psql`. The `overlap >= chunk_size` guard
+also verified on this endpoint (`400`, no hang).
+
+**Web UI**
+
+`app/static/index.html` has an "Upload File" section after "Store in Postgres" —
+a native file picker (`.txt` only) + chunk-size/overlap fields, posting as `FormData`
+(not JSON, since it's a file upload) to `/api/embeddings/upload`.
+
+---
+
 ## Progress
 
 - [x] Step 1 — text → embedding endpoint
 - [x] Step 2 — cosine similarity ranking
 - [x] Step 3 — document chunking
-- [ ] Step 4 — store vectors (pgvector)
+- [x] Step 4 — store vectors (pgvector)
 - [ ] Step 5 — vector similarity search in Postgres
 - [ ] Step 6 — full RAG (retrieval + LLM answer)

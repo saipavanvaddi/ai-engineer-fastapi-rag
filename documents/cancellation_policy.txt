@@ -1,0 +1,8 @@
+Customers can cancel an order before the restaurant accepts it.
+Once the restaurant accepts the order, cancellation may not be possible.
+If food preparation has already started, cancellation is normally not allowed.
+Orders can be cancelled from the Orders tab by tapping Cancel Order.
+If a restaurant is closed or unable to fulfil an order, it is auto-cancelled and fully refunded.
+Repeated cancellations after acceptance may result in a temporary restriction on placing new orders.
+For a cancellation request after acceptance, customers should contact support directly,
+and approval depends on how far preparation has progressed.

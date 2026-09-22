@@ -1,13 +1,19 @@
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 
-from app.schemas.embedding import ChunkRequest, EmbeddingRequest, SimilarityRequest
+from app.schemas.embedding import (
+    ChunkRequest,
+    EmbeddingRequest,
+    SimilarityRequest,
+    StoreChunksRequest,
+)
 from app.services.chunking_service import chunk_text
 from app.services.embedding_service import create_embedding
 from app.services.similarity_service import create_embeddings, find_similar_sentences
+from app.services.vector_store_service import store_chunks
 
 
 load_dotenv()
@@ -78,6 +84,85 @@ def chunk_and_embed(request: ChunkRequest):
     return {
         "total_chunks": len(results),
         "chunks": results,
+    }
+
+
+@app.post("/api/embeddings/store")
+def store_chunks_endpoint(request: StoreChunksRequest):
+
+    if request.overlap >= request.chunk_size:
+        raise HTTPException(
+            status_code=400,
+            detail="overlap must be smaller than chunk_size",
+        )
+
+    chunks = chunk_text(
+        text=request.text,
+        chunk_size=request.chunk_size,
+        overlap=request.overlap,
+    )
+
+    embeddings = create_embeddings(chunks)
+
+    stored_ids = store_chunks(
+        chunks,
+        embeddings,
+        document_id=request.document_id,
+        source=request.source,
+    )
+
+    return {
+        "total_stored": len(stored_ids),
+        "chunk_ids": stored_ids,
+    }
+
+
+@app.post("/api/embeddings/upload")
+async def upload_and_store(
+    file: UploadFile = File(...),
+    chunk_size: int = Form(500),
+    overlap: int = Form(50),
+    document_id: int | None = Form(None),
+):
+
+    if overlap >= chunk_size:
+        raise HTTPException(
+            status_code=400,
+            detail="overlap must be smaller than chunk_size",
+        )
+
+    raw = await file.read()
+
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="file must be plain text (utf-8) — PDFs/images aren't supported yet",
+        )
+
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="file is empty")
+
+    chunks = chunk_text(
+        text=text,
+        chunk_size=chunk_size,
+        overlap=overlap,
+    )
+
+    embeddings = create_embeddings(chunks)
+
+    stored_ids = store_chunks(
+        chunks,
+        embeddings,
+        document_id=document_id,
+        source=file.filename,
+    )
+
+    return {
+        "source": file.filename,
+        "total_stored": len(stored_ids),
+        "chunk_ids": stored_ids,
     }
 
 

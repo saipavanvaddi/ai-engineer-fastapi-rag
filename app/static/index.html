@@ -118,6 +118,10 @@
     padding: 10px 12px;
     font-size: 14px;
   }
+  input[type="file"] {
+    color: var(--muted);
+    font-size: 13px;
+  }
   .number-row {
     display: flex;
     gap: 12px;
@@ -201,6 +205,47 @@
     </form>
 
     <div id="chunk-result"></div>
+  </section>
+
+  <section>
+    <h1>Store in Postgres</h1>
+    <p class="sub">POST /api/embeddings/store — chunks, embeds, and saves to document_chunks (pgvector)</p>
+
+    <form id="store-form">
+      <textarea id="store-text" placeholder="Paste a longer document here..." required></textarea>
+      <div class="number-row">
+        <label>Chunk size (words)
+          <input type="number" id="store-chunk-size" value="20" min="1" required>
+        </label>
+        <label>Overlap (words)
+          <input type="number" id="store-overlap" value="5" min="0" required>
+        </label>
+      </div>
+      <input type="text" id="store-source" placeholder="Source label (optional), e.g. cancellation_policy.txt">
+      <button type="submit" id="store-submit-btn">Chunk, embed &amp; store</button>
+    </form>
+
+    <div id="store-result"></div>
+  </section>
+
+  <section>
+    <h1>Upload File</h1>
+    <p class="sub">POST /api/embeddings/upload — uploads a .txt file, chunks, embeds, and stores it</p>
+
+    <form id="upload-form">
+      <input type="file" id="upload-file" accept=".txt" required>
+      <div class="number-row">
+        <label>Chunk size (words)
+          <input type="number" id="upload-chunk-size" value="500" min="1" required>
+        </label>
+        <label>Overlap (words)
+          <input type="number" id="upload-overlap" value="50" min="0" required>
+        </label>
+      </div>
+      <button type="submit" id="upload-submit-btn">Upload &amp; store</button>
+    </form>
+
+    <div id="upload-result"></div>
   </section>
 </main>
 
@@ -350,6 +395,103 @@
     } finally {
       chunkSubmitBtn.disabled = false;
       chunkSubmitBtn.textContent = "Chunk & embed";
+    }
+  });
+
+  const storeForm = document.getElementById("store-form");
+  const storeResultEl = document.getElementById("store-result");
+  const storeSubmitBtn = document.getElementById("store-submit-btn");
+
+  storeForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const text = document.getElementById("store-text").value.trim();
+    const chunk_size = parseInt(document.getElementById("store-chunk-size").value, 10);
+    const overlap = parseInt(document.getElementById("store-overlap").value, 10);
+    const source = document.getElementById("store-source").value.trim() || null;
+
+    if (!text) return;
+
+    storeSubmitBtn.disabled = true;
+    storeSubmitBtn.textContent = "Loading...";
+    storeResultEl.innerHTML = "";
+
+    try {
+      const response = await fetch("/api/embeddings/store", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, chunk_size, overlap, source }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`${response.status}: ${detail}`);
+      }
+
+      const data = await response.json();
+
+      storeResultEl.innerHTML = `
+        <div class="card">
+          <div class="row"><span>Total stored</span><span>${data.total_stored}</span></div>
+          <div class="row"><span>Chunk IDs</span><span>${data.chunk_ids.join(", ")}</span></div>
+        </div>
+      `;
+    } catch (err) {
+      storeResultEl.innerHTML = `<p class="error">${err.message}</p>`;
+    } finally {
+      storeSubmitBtn.disabled = false;
+      storeSubmitBtn.textContent = "Chunk, embed & store";
+    }
+  });
+
+  const uploadForm = document.getElementById("upload-form");
+  const uploadResultEl = document.getElementById("upload-result");
+  const uploadSubmitBtn = document.getElementById("upload-submit-btn");
+
+  uploadForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const fileInput = document.getElementById("upload-file");
+    const file = fileInput.files[0];
+    const chunk_size = document.getElementById("upload-chunk-size").value;
+    const overlap = document.getElementById("upload-overlap").value;
+
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("chunk_size", chunk_size);
+    formData.append("overlap", overlap);
+
+    uploadSubmitBtn.disabled = true;
+    uploadSubmitBtn.textContent = "Uploading...";
+    uploadResultEl.innerHTML = "";
+
+    try {
+      const response = await fetch("/api/embeddings/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`${response.status}: ${detail}`);
+      }
+
+      const data = await response.json();
+
+      uploadResultEl.innerHTML = `
+        <div class="card">
+          <div class="row"><span>Source</span><span>${data.source}</span></div>
+          <div class="row"><span>Total stored</span><span>${data.total_stored}</span></div>
+          <div class="row"><span>Chunk IDs</span><span>${data.chunk_ids.join(", ")}</span></div>
+        </div>
+      `;
+    } catch (err) {
+      uploadResultEl.innerHTML = `<p class="error">${err.message}</p>`;
+    } finally {
+      uploadSubmitBtn.disabled = false;
+      uploadSubmitBtn.textContent = "Upload & store";
     }
   });
 </script>

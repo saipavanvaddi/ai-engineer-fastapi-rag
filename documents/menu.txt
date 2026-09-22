@@ -1,0 +1,8 @@
+Chicken biryani costs 250 rupees. Veg biryani costs 180 rupees.
+Chicken 65 costs 200 rupees. Paneer butter masala costs 220 rupees.
+Mutton curry costs 320 rupees and is available only on weekends.
+Butter naan costs 40 rupees and plain rice costs 60 rupees.
+Gulab jamun costs 80 rupees for two pieces. Cold drinks cost 40 rupees each.
+A combo of chicken biryani with raita and a cold drink costs 300 rupees.
+Spice levels can be chosen as mild, medium, or spicy at no extra cost.
+Vegan options are limited but can be requested by removing dairy from most dishes.

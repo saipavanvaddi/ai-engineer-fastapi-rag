@@ -1,0 +1,9 @@
+Refund eligibility depends on the cancellation stage and payment method.
+Refunds for prepaid orders are processed within 5 to 7 business days.
+Cash on delivery orders are not eligible for refunds if cancelled after acceptance,
+since no payment was collected in advance.
+Refunds can be issued as wallet credit, which is instant, or as a bank refund, which takes longer.
+Wallet credit refunds can be used toward any future order with no expiry.
+If an order arrives damaged, missing items, or incorrect, a partial or full refund can be requested
+within 24 hours of delivery through the Help section.
+Refund status can be tracked from the Orders tab under Refund Status.
