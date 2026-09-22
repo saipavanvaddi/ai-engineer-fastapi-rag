@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Embeddings Tester</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2f3a;
+    --text: #e6e8eb;
+    --muted: #9aa4b2;
+    --accent: #5b8def;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+  main {
+    width: 100%;
+    max-width: 640px;
+  }
+  h1 {
+    font-size: 20px;
+    margin-bottom: 4px;
+  }
+  p.sub {
+    color: var(--muted);
+    margin-top: 0;
+    font-size: 14px;
+  }
+  form {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  textarea {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    resize: vertical;
+    min-height: 70px;
+  }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    align-self: flex-start;
+  }
+  button:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  #result {
+    margin-top: 20px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .row:last-child { border-bottom: none; }
+  .row span:first-child { color: var(--muted); }
+  code {
+    display: block;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    max-height: 160px;
+    overflow: auto;
+    word-break: break-all;
+  }
+  .error {
+    color: #f28b82;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Embeddings Tester</h1>
+  <p class="sub">POST /api/embeddings — converts text into a vector</p>
+
+  <form id="embed-form">
+    <textarea id="text" placeholder="Chicken biryani costs 250 rupees" required></textarea>
+    <button type="submit" id="submit-btn">Get embedding</button>
+  </form>
+
+  <div id="result"></div>
+</main>
+
+<script>
+  const form = document.getElementById("embed-form");
+  const resultEl = document.getElementById("result");
+  const submitBtn = document.getElementById("submit-btn");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const text = document.getElementById("text").value.trim();
+    if (!text) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Loading...";
+    resultEl.innerHTML = "";
+
+    try {
+      const response = await fetch("/api/embeddings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`${response.status}: ${detail}`);
+      }
+
+      const data = await response.json();
+      const preview = data.embedding.slice(0, 8).map(n => n.toFixed(4)).join(", ");
+
+      resultEl.innerHTML = `
+        <div class="card">
+          <div class="row"><span>Text</span><span>${data.text}</span></div>
+          <div class="row"><span>Dimensions</span><span>${data.dimensions}</span></div>
+          <code>[${preview}, ...]</code>
+        </div>
+      `;
+    } catch (err) {
+      resultEl.innerHTML = `<p class="error">${err.message}</p>`;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Get embedding";
+    }
+  });
+</script>
+</body>
+</html>

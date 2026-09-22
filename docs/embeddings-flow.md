@@ -1,0 +1,116 @@
+# Embeddings — Step-by-Step Flow
+
+## Setup (run once)
+
+```
+cd D:\Projects\AI_Engineer
+venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+`.env` must contain `OPENAI_API_KEY=...`.
+
+## Run the server
+
+```
+cd D:\Projects\AI_Engineer
+venv\Scripts\activate
+uvicorn app.main:app --reload
+```
+
+Server runs at `http://127.0.0.1:8000`.
+
+---
+
+## Step 1 — Basic embedding endpoint ✅
+
+Convert one piece of text into a vector.
+
+**Files**
+
+- `app/schemas/embedding.py` → `EmbeddingRequest`
+- `app/services/embedding_service.py` → `create_embedding(text)`
+- `app/main.py` → `POST /api/embeddings`
+
+**Flow**
+
+```
+text
+  |
+  v
+client.embeddings.create(model="text-embedding-3-small", input=text)
+  |
+  v
+1536-dim vector (list[float])
+```
+
+**Test**
+
+```
+curl -X POST http://127.0.0.1:8000/api/embeddings ^
+  -H "Content-Type: application/json" ^
+  -d "{\"text\": \"Chicken biryani costs 250 rupees\"}"
+```
+
+Response:
+
+```json
+{
+  "text": "Chicken biryani costs 250 rupees",
+  "dimensions": 1536,
+  "embedding": [-0.0108, -0.0235, 0.0742, "..."]
+}
+```
+
+Verified live — real call to OpenAI, real 1536-dim vector back.
+
+**Web UI**
+
+A simple test page is served at `http://127.0.0.1:8000/` (no Postman/curl needed):
+
+- `app/static/index.html` — textarea + button, calls `POST /api/embeddings` via `fetch`, shows dimensions + a preview of the vector
+- `app/main.py` → `app.mount("/", StaticFiles(directory="app/static", html=True))`, mounted **after** the API routes so `/api/embeddings` still matches first
+
+---
+
+## Step 2 — Similarity search ⬜
+
+Compare a query against several candidate sentences, rank by cosine similarity.
+
+**Plan**
+
+- `app/schemas/embedding.py` → add `SimilarityRequest` (`query`, `sentences`)
+- `app/services/similarity_service.py` → `create_embeddings(texts)` (batched), `cosine_similarity(a, b)`, `find_similar_sentences(query, sentences)`
+- `app/main.py` → `POST /api/embeddings/similarity`
+- Needs `numpy` (already installed)
+
+**Test (once built)**
+
+```
+curl -X POST http://127.0.0.1:8000/api/embeddings/similarity ^
+  -H "Content-Type: application/json" ^
+  -d "{\"query\": \"How much does chicken biryani cost?\", \"sentences\": [\"Chicken biryani costs 250 rupees.\", \"The delivery partner is 10 minutes away.\", \"Veg meals are available for 180 rupees.\"]}"
+```
+
+---
+
+## Step 3 — Chunking ⬜
+
+Split a long document into overlapping chunks, embed each one.
+
+**Plan**
+
+- `app/schemas/embedding.py` → add `ChunkRequest` (`text`, `chunk_size`, `overlap`)
+- `app/services/chunking_service.py` → `chunk_text(text, chunk_size, overlap)`
+- `app/main.py` → `POST /api/embeddings/chunk` (reuses batch embedding from Step 2)
+
+---
+
+## Progress
+
+- [x] Step 1 — text → embedding endpoint
+- [ ] Step 2 — cosine similarity ranking
+- [ ] Step 3 — document chunking
+- [ ] Step 4 — store vectors (pgvector)
+- [ ] Step 5 — vector similarity search in Postgres
+- [ ] Step 6 — full RAG (retrieval + LLM answer)
