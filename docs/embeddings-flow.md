@@ -533,6 +533,85 @@ each retrieved chunk's source file and similarity score.
 
 ---
 
+## Step 7 — Session-based chat (multi-turn RAG) ✅
+
+`/api/rag/ask` is stateless — every call is a fresh question with no memory of earlier
+ones. This step adds `POST /api/rag/chat`, which remembers the conversation server-side
+via a `session_id`, so follow-up questions with pronouns ("it", "that", "the veg one")
+resolve correctly.
+
+**Files**
+
+- `app/schemas/rag.py` → `ChatRequest` (`message`, `session_id: str | None = None`, `top_k=5`)
+- `app/services/session_service.py` → in-memory session store: `create_session()` (uuid4 hex), `get_history(session_id)`, `append_turn(session_id, role, content)`. Resets on server restart — fine for a learning app; a real deployment would back this with Postgres or Redis.
+- `app/services/rag_service.py` → `chat_with_session(message, session_id, top_k)`: generates a new `session_id` if none given, retrieves chunks for the *current* message (not the whole history), builds `history + [context-stuffed new turn]` as the `input` list for `client.responses.create`, then stores the **plain** message/answer (not the context-stuffed version) back into history so context blocks don't pile up across turns
+- `app/main.py` → `POST /api/rag/chat`
+
+**Flow**
+
+```
+message (+ optional session_id)
+  |
+  v
+session_id is None?  →  create_session()  (uuid4)
+  |
+  v
+history = get_history(session_id)        (previous {role, content} turns, [] if new)
+  |
+  v
+search_similar_chunks(message, top_k)     (same retrieval as Step 5/6 — always re-run on the latest message)
+  |
+  v
+messages = history + [{"role": "user", "content": "Context:...\n\nQuestion: message"}]
+  |
+  v
+client.responses.create(instructions=RAG_INSTRUCTIONS, input=messages)
+  |
+  v
+append_turn(session_id, "user", message)          (plain message, no context block)
+append_turn(session_id, "assistant", answer)
+  |
+  v
+{ session_id, answer, sources }
+```
+
+**Test**
+
+Payload for `/docs` → `Try it out` (turn 1, no `session_id`):
+
+```json
+{ "message": "How much does chicken biryani cost?" }
+```
+
+Response includes a fresh `session_id` — reuse it for turn 2:
+
+```json
+{ "message": "What about the veg version? Is it cheaper?", "session_id": "<from turn 1>" }
+```
+
+Verified live:
+
+```
+Turn 1 → "Chicken biryani costs 250 rupees."
+Turn 2 (same session) → "Yes. Veg biryani costs 180 rupees, which is cheaper than the
+                          chicken biryani at 250 rupees."
+```
+
+"The veg version" and "it" in turn 2 correctly resolved to biryani from turn 1's context —
+without session history, the model has no way to know what "it" refers to. Also confirmed
+session isolation: sending the same turn-2 message with **no** `session_id` generates a
+brand-new, different `session_id` (fresh session, no shared history).
+
+**Web UI**
+
+`app/static/index.html` has a seventh section — "Chat (with session)" — a running
+transcript (chat bubbles, user right-aligned / assistant left-aligned) instead of a single
+result card, since this endpoint is inherently multi-turn. The page keeps `session_id` in
+a JS variable (`chatSessionId`) and sends it on every subsequent message; a "New session"
+button clears it and starts fresh.
+
+---
+
 ## Progress
 
 - [x] Step 1 — text → embedding endpoint
@@ -541,3 +620,4 @@ each retrieved chunk's source file and similarity score.
 - [x] Step 4 — store vectors (pgvector)
 - [x] Step 5 — vector similarity search in Postgres
 - [x] Step 6 — full RAG (retrieval + LLM answer)
+- [x] Step 7 — session-based multi-turn chat

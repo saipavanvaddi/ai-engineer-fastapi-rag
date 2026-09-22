@@ -27,6 +27,7 @@ FastAPI backend for the Embeddings → Vector DB → RAG learning roadmap
 | `POST /api/embeddings/upload`  | Upload a `.txt` file → chunk, embed, persist                |
 | `POST /api/embeddings/search`  | pgvector `<=>` similarity search over stored chunks         |
 | `POST /api/rag/ask`            | Full RAG: retrieve chunks, then answer via LLM using only that context |
+| `POST /api/rag/chat`           | Same as `/ask`, but remembers the conversation server-side via `session_id` |
 
 Full request/response details, payloads, and verified examples for each: see
 [docs/embeddings-flow.md](docs/embeddings-flow.md).

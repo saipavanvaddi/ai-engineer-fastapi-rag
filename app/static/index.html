@@ -158,6 +158,32 @@
   }
   .result-item:last-child { border-bottom: none; }
   .result-item .row span:last-child { color: var(--muted); font-size: 12px; }
+  #chat-transcript {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .bubble {
+    max-width: 80%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+  }
+  .bubble.user {
+    align-self: flex-end;
+    background: var(--accent);
+    color: white;
+  }
+  .bubble.assistant {
+    align-self: flex-start;
+    background: var(--panel);
+    border: 1px solid var(--border);
+  }
 </style>
 </head>
 <body>
@@ -280,6 +306,21 @@
     </form>
 
     <div id="ask-result"></div>
+  </section>
+
+  <section>
+    <h1>Chat (with session)</h1>
+    <p class="sub">POST /api/rag/chat — remembers earlier turns server-side via session_id</p>
+
+    <div id="chat-session-label" class="sub" style="margin-bottom:8px">No session yet — first message starts one.</div>
+    <div id="chat-transcript"></div>
+
+    <form id="chat-form">
+      <input type="text" id="chat-message" placeholder="How much does chicken biryani cost?" required>
+      <button type="submit" id="chat-submit-btn">Send</button>
+    </form>
+
+    <button type="button" id="chat-reset-btn" style="margin-top:8px;background:transparent;border:1px solid var(--border);color:var(--muted)">New session</button>
   </section>
 </main>
 
@@ -629,6 +670,66 @@
       askSubmitBtn.disabled = false;
       askSubmitBtn.textContent = "Ask";
     }
+  });
+
+  let chatSessionId = null;
+
+  const chatForm = document.getElementById("chat-form");
+  const chatTranscriptEl = document.getElementById("chat-transcript");
+  const chatSubmitBtn = document.getElementById("chat-submit-btn");
+  const chatSessionLabelEl = document.getElementById("chat-session-label");
+  const chatResetBtn = document.getElementById("chat-reset-btn");
+
+  function addBubble(role, text) {
+    const bubble = document.createElement("div");
+    bubble.className = `bubble ${role}`;
+    bubble.textContent = text;
+    chatTranscriptEl.appendChild(bubble);
+    chatTranscriptEl.scrollTop = chatTranscriptEl.scrollHeight;
+  }
+
+  chatForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const messageInput = document.getElementById("chat-message");
+    const message = messageInput.value.trim();
+    if (!message) return;
+
+    addBubble("user", message);
+    messageInput.value = "";
+
+    chatSubmitBtn.disabled = true;
+    chatSubmitBtn.textContent = "...";
+
+    try {
+      const response = await fetch("/api/rag/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, session_id: chatSessionId }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`${response.status}: ${detail}`);
+      }
+
+      const data = await response.json();
+      chatSessionId = data.session_id;
+      chatSessionLabelEl.textContent = `session_id: ${chatSessionId}`;
+
+      addBubble("assistant", data.answer);
+    } catch (err) {
+      addBubble("assistant", `Error: ${err.message}`);
+    } finally {
+      chatSubmitBtn.disabled = false;
+      chatSubmitBtn.textContent = "Send";
+    }
+  });
+
+  chatResetBtn.addEventListener("click", () => {
+    chatSessionId = null;
+    chatTranscriptEl.innerHTML = "";
+    chatSessionLabelEl.textContent = "No session yet — first message starts one.";
   });
 </script>
 </body>

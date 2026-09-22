@@ -109,12 +109,18 @@ generate_answer()                    [rag_service.py]
 | `POST /api/embeddings/upload` | same as `/store`, source = filename | write | embed |
 | `POST /api/embeddings/search` | `search_similar_chunks` | read | embed |
 | `POST /api/rag/ask` | `search_similar_chunks` → `generate_answer` | read | embed + chat |
+| `POST /api/rag/chat` | `search_similar_chunks` → `chat_with_session` (reads/writes `session_service`'s in-memory store) | read | embed + chat |
 
 Steps 1–2 (`/similarity`) do cosine similarity **in Python** with numpy — fine for a
 handful of sentences held in memory, the "teach the concept" version. Step 5 (`/search`)
 does it **in Postgres** with pgvector's `<=>` operator — what actually scales, since the
 database indexes and searches the vectors directly instead of pulling everything into
 Python first.
+
+`/api/rag/ask` is stateless (one question, one answer, no memory). `/api/rag/chat` adds a
+`session_id`-keyed conversation history (in-memory, not Postgres — resets on restart) so
+follow-up questions can use pronouns like "it" or "the veg one" and still resolve
+correctly against the prior turn.
 
 ---
 

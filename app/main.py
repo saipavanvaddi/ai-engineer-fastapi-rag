@@ -11,10 +11,10 @@ from app.schemas.embedding import (
     SimilarityRequest,
     StoreChunksRequest,
 )
-from app.schemas.rag import AskRequest
+from app.schemas.rag import AskRequest, ChatRequest
 from app.services.chunking_service import chunk_text
 from app.services.embedding_service import create_embedding
-from app.services.rag_service import generate_answer
+from app.services.rag_service import chat_with_session, generate_answer
 from app.services.search_service import search_similar_chunks
 from app.services.similarity_service import create_embeddings, find_similar_sentences
 from app.services.vector_store_service import store_chunks
@@ -194,6 +194,23 @@ def ask_endpoint(request: AskRequest):
 
     return {
         "question": request.question,
+        "answer": result["answer"],
+        "sources": result["sources"],
+    }
+
+
+@app.post("/api/rag/chat")
+def chat_endpoint(request: ChatRequest):
+
+    result = chat_with_session(
+        request.message,
+        session_id=request.session_id,
+        top_k=request.top_k,
+    )
+
+    return {
+        "session_id": result["session_id"],
+        "message": request.message,
         "answer": result["answer"],
         "sources": result["sources"],
     }
