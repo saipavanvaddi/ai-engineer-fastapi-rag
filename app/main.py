@@ -7,11 +7,13 @@ from fastapi.staticfiles import StaticFiles
 from app.schemas.embedding import (
     ChunkRequest,
     EmbeddingRequest,
+    SearchRequest,
     SimilarityRequest,
     StoreChunksRequest,
 )
 from app.services.chunking_service import chunk_text
 from app.services.embedding_service import create_embedding
+from app.services.search_service import search_similar_chunks
 from app.services.similarity_service import create_embeddings, find_similar_sentences
 from app.services.vector_store_service import store_chunks
 
@@ -163,6 +165,20 @@ async def upload_and_store(
         "source": file.filename,
         "total_stored": len(stored_ids),
         "chunk_ids": stored_ids,
+    }
+
+
+@app.post("/api/embeddings/search")
+def search_chunks_endpoint(request: SearchRequest):
+
+    results = search_similar_chunks(
+        request.query,
+        top_k=request.top_k,
+    )
+
+    return {
+        "query": request.query,
+        "results": results,
     }
 
 

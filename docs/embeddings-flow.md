@@ -375,9 +375,86 @@ also verified on this endpoint (`400`, no hang).
 
 **Web UI**
 
-`app/static/index.html` has an "Upload File" section after "Store in Postgres" —
+`app/static/index.html` has a section between "Store in Postgres" and "Search Postgres" —
 a native file picker (`.txt` only) + chunk-size/overlap fields, posting as `FormData`
 (not JSON, since it's a file upload) to `/api/embeddings/upload`.
+
+---
+
+## Step 5 — Vector similarity search in Postgres ✅
+
+Search stored chunks directly in Postgres using pgvector's `<=>` cosine-distance operator,
+instead of the in-memory numpy approach from Step 2. This is what real retrieval looks
+like at scale — Postgres does the nearest-neighbor search, not Python.
+
+**Files**
+
+- `app/schemas/embedding.py` → `SearchRequest` (`query`, `top_k=5`)
+- `app/services/search_service.py` → `search_similar_chunks(query, top_k)` — embeds the query, runs `SELECT ... ORDER BY embedding <=> %s::vector LIMIT %s`, returns `distance` and `similarity = 1 - distance`
+- `app/main.py` → `POST /api/embeddings/search`
+
+**Flow**
+
+```
+query
+  |
+  v
+create_embedding(query)        (1 OpenAI call)
+  |
+  v
+SELECT id, document_id, content, metadata, embedding <=> %s::vector AS distance
+FROM document_chunks
+ORDER BY embedding <=> %s::vector
+LIMIT %s
+  |
+  v
+ranked results (Postgres does the nearest-neighbor search, not Python)
+```
+
+No index (ivfflat/hnsw) yet — with only 5 rows this is an exact sequential scan, which is
+fine. An index becomes worth adding once the table has thousands+ of rows.
+
+**Test**
+
+Payload for `/docs` → `Try it out`:
+
+```json
+{
+  "query": "Can I get a refund if I cancel my order after the restaurant accepts it?",
+  "top_k": 5
+}
+```
+
+For the web UI form — paste this into the **query** box and set **Top K** = `5`:
+
+```
+Can I get a refund if I cancel my order after the restaurant accepts it?
+```
+
+Verified live against the 5 seeded documents:
+
+```json
+{
+  "query": "Can I get a refund if I cancel my order after the restaurant accepts it?",
+  "results": [
+    {"document_id": 3, "metadata": {"source": "cancellation_policy.txt"}, "similarity": 0.7290},
+    {"document_id": 4, "metadata": {"source": "refund_policy.txt"},       "similarity": 0.5654},
+    {"document_id": 5, "metadata": {"source": "support_hours.txt"},       "similarity": 0.3465},
+    {"document_id": 2, "metadata": {"source": "delivery_policy.txt"},     "similarity": 0.3436},
+    {"document_id": 1, "metadata": {"source": "menu.txt"},                "similarity": 0.1486}
+  ]
+}
+```
+
+Cancellation + refund policies correctly rank #1/#2; unrelated docs trail well behind.
+Cross-checked with a second query, `"Is delivery free and how far do you deliver?"` →
+`delivery_policy.txt` scored 0.5280, next closest (`refund_policy.txt`) only 0.2697.
+
+**Web UI**
+
+`app/static/index.html` has a fifth section — "Search Postgres" — query box + top-K,
+calling `POST /api/embeddings/search` and rendering results as ranked bars with the
+matched chunk's source label and content.
 
 ---
 
@@ -387,5 +464,5 @@ a native file picker (`.txt` only) + chunk-size/overlap fields, posting as `Form
 - [x] Step 2 — cosine similarity ranking
 - [x] Step 3 — document chunking
 - [x] Step 4 — store vectors (pgvector)
-- [ ] Step 5 — vector similarity search in Postgres
+- [x] Step 5 — vector similarity search in Postgres
 - [ ] Step 6 — full RAG (retrieval + LLM answer)

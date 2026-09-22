@@ -247,6 +247,23 @@
 
     <div id="upload-result"></div>
   </section>
+
+  <section>
+    <h1>Search Postgres</h1>
+    <p class="sub">POST /api/embeddings/search — pgvector cosine-distance search over stored chunks</p>
+
+    <form id="search-form">
+      <input type="text" id="search-query" placeholder="Can I get a refund if I cancel my order?" required>
+      <div class="number-row">
+        <label>Top K
+          <input type="number" id="search-top-k" value="5" min="1" required>
+        </label>
+      </div>
+      <button type="submit" id="search-submit-btn">Search</button>
+    </form>
+
+    <div id="search-result"></div>
+  </section>
 </main>
 
 <script>
@@ -492,6 +509,57 @@
     } finally {
       uploadSubmitBtn.disabled = false;
       uploadSubmitBtn.textContent = "Upload & store";
+    }
+  });
+
+  const searchForm = document.getElementById("search-form");
+  const searchResultEl = document.getElementById("search-result");
+  const searchSubmitBtn = document.getElementById("search-submit-btn");
+
+  searchForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const query = document.getElementById("search-query").value.trim();
+    const top_k = parseInt(document.getElementById("search-top-k").value, 10);
+
+    if (!query) return;
+
+    searchSubmitBtn.disabled = true;
+    searchSubmitBtn.textContent = "Searching...";
+    searchResultEl.innerHTML = "";
+
+    try {
+      const response = await fetch("/api/embeddings/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, top_k }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`${response.status}: ${detail}`);
+      }
+
+      const data = await response.json();
+
+      const items = data.results.map(r => {
+        const pct = Math.max(0, r.similarity) * 100;
+        const src = r.metadata && r.metadata.source ? r.metadata.source : `doc ${r.document_id}`;
+        return `
+          <div class="result-item">
+            <div class="row"><span>${src}</span><span>${r.similarity.toFixed(4)}</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+            <div style="margin-top:6px;font-size:13px;color:var(--muted)">${r.content}</div>
+          </div>
+        `;
+      }).join("");
+
+      searchResultEl.innerHTML = `<div class="card">${items}</div>`;
+    } catch (err) {
+      searchResultEl.innerHTML = `<p class="error">${err.message}</p>`;
+    } finally {
+      searchSubmitBtn.disabled = false;
+      searchSubmitBtn.textContent = "Search";
     }
   });
 </script>

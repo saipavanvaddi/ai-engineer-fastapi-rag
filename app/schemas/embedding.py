@@ -22,3 +22,8 @@ class StoreChunksRequest(BaseModel):
     overlap: int = 50
     document_id: int | None = None
     source: str | None = None
+
+
+class SearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
