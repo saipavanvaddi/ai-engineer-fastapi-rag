@@ -458,6 +458,81 @@ matched chunk's source label and content.
 
 ---
 
+## Step 6 — Full RAG (retrieval + LLM answer) ✅
+
+Ties everything together: retrieve relevant chunks (Step 5), then hand them to an LLM as
+context so it answers using only that context — the actual point of the whole pipeline.
+
+**Files**
+
+- `app/schemas/rag.py` → `AskRequest` (`question`, `top_k=5`)
+- `app/services/rag_service.py` → `generate_answer(question, top_k)` — calls `search_similar_chunks` (Step 5), builds a `[source] content` context block from the results, calls `client.responses.create(model="gpt-5-mini", instructions=..., input=...)` with instructions to answer only from context and say so if it can't, returns `{answer, sources}`
+- `app/main.py` → `POST /api/rag/ask`
+
+**Flow**
+
+```
+question
+  |
+  v
+search_similar_chunks(question, top_k)     (Step 5 — pgvector <=> search)
+  |
+  v
+context = "[source] content" for each retrieved chunk
+  |
+  v
+client.responses.create(instructions="answer only from context", input=context + question)
+  |
+  v
+{ answer, sources: [{source, similarity}, ...] }
+```
+
+This is the same two-embedding-paths diagram from the very start of the roadmap —
+documents embedded once at ingestion time (Steps 3/4), the question embedded at query
+time (Step 5) — now closed by handing the retrieved text to an LLM instead of returning
+raw chunks.
+
+**Test**
+
+Payload for `/docs` → `Try it out`:
+
+```json
+{
+  "question": "Can I cancel my order after the restaurant accepts it, and will I get a refund?",
+  "top_k": 3
+}
+```
+
+For the web UI form — paste this into the **question** box:
+
+```
+Can I cancel my order after the restaurant accepts it, and will I get a refund?
+```
+
+Verified live against the 5 seeded documents:
+
+```
+ANSWER:
+Yes. If you cancel after the restaurant accepts and no payment was collected in advance,
+you can get a refund as wallet credit, processed within 5-7 business days. Cash-on-delivery
+orders cancelled after acceptance are not eligible for refunds. You can check progress in
+the Orders tab under Refund Status.
+
+SOURCES: refund_policy.txt (sim 0.53, 0.48, 0.48)
+```
+
+Also verified the "don't make it up" instruction holds for an out-of-scope question —
+`"Who is the CEO of Manakarto?"` → *"I don't have that information in the provided
+context..."* instead of a hallucinated answer.
+
+**Web UI**
+
+`app/static/index.html` has a sixth section — "Ask (RAG)" — a question box + top-K,
+calling `POST /api/rag/ask` and showing the generated answer plus a sources card listing
+each retrieved chunk's source file and similarity score.
+
+---
+
 ## Progress
 
 - [x] Step 1 — text → embedding endpoint
@@ -465,4 +540,4 @@ matched chunk's source label and content.
 - [x] Step 3 — document chunking
 - [x] Step 4 — store vectors (pgvector)
 - [x] Step 5 — vector similarity search in Postgres
-- [ ] Step 6 — full RAG (retrieval + LLM answer)
+- [x] Step 6 — full RAG (retrieval + LLM answer)

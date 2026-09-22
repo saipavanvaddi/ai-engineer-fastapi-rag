@@ -264,6 +264,23 @@
 
     <div id="search-result"></div>
   </section>
+
+  <section>
+    <h1>Ask (RAG)</h1>
+    <p class="sub">POST /api/rag/ask — retrieves relevant chunks, then answers using only that context</p>
+
+    <form id="ask-form">
+      <input type="text" id="ask-question" placeholder="Can I cancel my order after the restaurant accepts it?" required>
+      <div class="number-row">
+        <label>Top K
+          <input type="number" id="ask-top-k" value="5" min="1" required>
+        </label>
+      </div>
+      <button type="submit" id="ask-submit-btn">Ask</button>
+    </form>
+
+    <div id="ask-result"></div>
+  </section>
 </main>
 
 <script>
@@ -560,6 +577,57 @@
     } finally {
       searchSubmitBtn.disabled = false;
       searchSubmitBtn.textContent = "Search";
+    }
+  });
+
+  const askForm = document.getElementById("ask-form");
+  const askResultEl = document.getElementById("ask-result");
+  const askSubmitBtn = document.getElementById("ask-submit-btn");
+
+  askForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const question = document.getElementById("ask-question").value.trim();
+    const top_k = parseInt(document.getElementById("ask-top-k").value, 10);
+
+    if (!question) return;
+
+    askSubmitBtn.disabled = true;
+    askSubmitBtn.textContent = "Thinking...";
+    askResultEl.innerHTML = "";
+
+    try {
+      const response = await fetch("/api/rag/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, top_k }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`${response.status}: ${detail}`);
+      }
+
+      const data = await response.json();
+
+      const sources = data.sources.map(s => `
+        <div class="row"><span>${s.source}</span><span>${s.similarity.toFixed(4)}</span></div>
+      `).join("");
+
+      askResultEl.innerHTML = `
+        <div class="card">
+          <div style="white-space:pre-wrap">${data.answer}</div>
+        </div>
+        <div class="card" style="margin-top:12px">
+          <div class="chunk-id" style="margin-bottom:6px">Sources</div>
+          ${sources}
+        </div>
+      `;
+    } catch (err) {
+      askResultEl.innerHTML = `<p class="error">${err.message}</p>`;
+    } finally {
+      askSubmitBtn.disabled = false;
+      askSubmitBtn.textContent = "Ask";
     }
   });
 </script>

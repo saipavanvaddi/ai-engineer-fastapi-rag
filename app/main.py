@@ -11,8 +11,10 @@ from app.schemas.embedding import (
     SimilarityRequest,
     StoreChunksRequest,
 )
+from app.schemas.rag import AskRequest
 from app.services.chunking_service import chunk_text
 from app.services.embedding_service import create_embedding
+from app.services.rag_service import generate_answer
 from app.services.search_service import search_similar_chunks
 from app.services.similarity_service import create_embeddings, find_similar_sentences
 from app.services.vector_store_service import store_chunks
@@ -179,6 +181,21 @@ def search_chunks_endpoint(request: SearchRequest):
     return {
         "query": request.query,
         "results": results,
+    }
+
+
+@app.post("/api/rag/ask")
+def ask_endpoint(request: AskRequest):
+
+    result = generate_answer(
+        request.question,
+        top_k=request.top_k,
+    )
+
+    return {
+        "question": request.question,
+        "answer": result["answer"],
+        "sources": result["sources"],
     }
 
 
